@@ -159,6 +159,7 @@ namespace System.Text.RegularExpressions.Symbolic
             public Node(T elem, Node? prev, Node? next) { _elem = elem; _prev = prev; _next = next; }
         }
 
+#if DEBUG
         public override string ToString()
         {
             StringBuilder sb = new();
@@ -178,6 +179,7 @@ namespace System.Text.RegularExpressions.Symbolic
             sb.Append(')');
             return sb.ToString();
         }
+#endif
 
         private bool CheckValidity() => _size >= 0 && // _size < 0 means that the list has been invalidated after Append
             (_size != 0 || (_first is null && _last is null)) && //empty list
