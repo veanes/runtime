@@ -263,15 +263,27 @@ namespace System.Text.RegularExpressions.Symbolic
         /// intermediate epsilons, if tryCreateFixedLengthMarker and length is fixed, add a fixed length
         /// marker at the end.
         /// </summary>
-        internal SymbolicRegexNode<TSet> CreateConcat(SymbolicRegexNode<TSet>[] nodes, bool tryCreateFixedLengthMarker) =>
+        internal SymbolicRegexNode<TSet> CreateConcat(SymbolicRegexNode<TSet>[] nodes, bool tryCreateFixedLengthMarker = false) =>
+            CreateConcatRev(EnumerateNodesInReverse(nodes), tryCreateFixedLengthMarker);
+
+        /// <summary>
+        /// Make a concatenation of given nodes, if any regex is nothing then return nothing, eliminate
+        /// intermediate epsilons, if tryCreateFixedLengthMarker and length is fixed, add a fixed length
+        /// marker at the end.
+        /// </summary>
+        internal SymbolicRegexNode<TSet> CreateConcat(List<SymbolicRegexNode<TSet>> nodes, bool tryCreateFixedLengthMarker = false) =>
             CreateConcatRev(EnumerateNodesInReverse(nodes), tryCreateFixedLengthMarker);
 
         private static IEnumerable<SymbolicRegexNode<TSet>> EnumerateNodesInReverse(SymbolicRegexNode<TSet>[] nodes)
         {
             for (int i = nodes.Length - 1; i >= 0; i--)
-            {
                 yield return nodes[i];
-            }
+        }
+
+        private static IEnumerable<SymbolicRegexNode<TSet>> EnumerateNodesInReverse(List<SymbolicRegexNode<TSet>> nodes)
+        {
+            for (int i = nodes.Count - 1; i >= 0; i--)
+                yield return nodes[i];
         }
 
         /// <summary>
@@ -359,6 +371,18 @@ namespace System.Text.RegularExpressions.Symbolic
                 }
             }
 
+            if (!(subsumes ?? false) && left._kind == SymbolicRegexNodeKind.Concat &&
+                right._kind == SymbolicRegexNodeKind.Concat)
+            {
+                Debug.Assert(right._left is not null && right._right is not null);
+                SymbolicRegexNode<TSet> rl = right._left;
+                if (rl._kind == SymbolicRegexNodeKind.Loop && rl._lower == 0 && rl._upper == 1 && rl.IsLazy)
+                {
+                    Debug.Assert(rl._left is not null);
+                    subsumes = SkipInConcatAndThenSubsumes(left, rl._left, right._right);
+                }
+            }
+
             if (!(subsumes ?? false) && left._kind == SymbolicRegexNodeKind.Effect)
             {
                 Debug.Assert(left._left is not null && left._right is not null);
@@ -374,6 +398,27 @@ namespace System.Text.RegularExpressions.Symbolic
             if (subsumes.HasValue)
                 _subsumptionCache[(left, right)] = subsumes.Value;
             return subsumes ?? false;
+        }
+
+        internal bool SkipInConcatAndThenSubsumes(SymbolicRegexNode<TSet> left, SymbolicRegexNode<TSet> rightToSkip, SymbolicRegexNode<TSet> rightTail)
+        {
+            while (rightToSkip._kind == SymbolicRegexNodeKind.Concat)
+            {
+                Debug.Assert(rightToSkip._left is not null && rightToSkip._right is not null);
+                if (left._kind != SymbolicRegexNodeKind.Concat)
+                    return false;
+                Debug.Assert(left._left is not null && left._right is not null);
+                if (left._left != rightToSkip._left)
+                    return false;
+                left = left._right;
+                rightToSkip = rightToSkip._right;
+            }
+            if (left._kind != SymbolicRegexNodeKind.Concat)
+                return false;
+            Debug.Assert(left._left is not null && left._right is not null);
+            if (left._left == rightToSkip)
+                return Subsumes(left._right, rightTail);
+            return false;
         }
 
         /// <summary>
