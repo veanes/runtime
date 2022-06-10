@@ -2036,17 +2036,54 @@ namespace System.Text.RegularExpressions.Tests
         [MemberData(nameof(StressTestNfaMode_TestData))]
         public async Task StressTestNfaMode(string pattern, string input_suffix, int expected_matchlength)
         {
-            Random random = new Random(0);
-            byte[] buffer = new byte[50_000];
-            random.NextBytes(buffer);
-            // Consider a random string of 50_000 a's and b's
-            var input = new string(Array.ConvertAll(buffer, b => (b <= 0x7F ? 'a' : 'b')));
+            int k = 50_000;
+            var input = MkRandom_a_b_String(k);
             input += input_suffix;
             Regex re = await RegexHelpers.GetRegexAsync(RegexEngine.NonBacktracking, pattern, RegexOptions.Singleline);
             Match m = re.Match(input);
             Assert.True(m.Success);
-            Assert.Equal(buffer.Length, m.Index);
+            Assert.Equal(k, m.Index);
             Assert.Equal(expected_matchlength, m.Length);
+        }
+
+        /// <summary>Create a random string of the given length consisting of a's and b's.</summary>
+        private static string MkRandom_a_b_String(int length)
+        {
+            Random random = new Random(0);
+            byte[] buffer = new byte[length];
+            random.NextBytes(buffer);
+            var str = new string(Array.ConvertAll(buffer, b => (b <= 0x7F ? 'a' : 'b')));
+            return str;
+        }
+
+        public static IEnumerable<object[]> StressTestNfaModeReverse_TestData()
+        {
+            int k = 10_000;
+            string ab = MkRandom_a_b_String(k);
+            yield return new object[] { "[ab]{10000}bc(x|y)z", ab + "bcxz", 0, k + 4 };
+        }
+
+        /// <summary>
+        /// Causes NonBacktracking engine to switch to NFA mode internally in reverse mode.
+        /// </summary>
+        [Theory]
+        [SkipOnTargetFramework(TargetFrameworkMonikers.NetFramework, "Doesn't support NonBacktracking")]
+        [MemberData(nameof(StressTestNfaModeReverse_TestData))]
+        public async Task StressTestNfaModeReverse(string pattern, string input, int match_start, int match_length)
+        {
+            RegexHelpers.SetSafeSizeThreshold(30_000);
+            try
+            {
+                Regex re = await RegexHelpers.GetRegexAsync(RegexEngine.NonBacktracking, pattern, RegexOptions.Singleline | RegexOptions.ExplicitCapture);
+                Match m = re.Match(input);
+                Assert.True(m.Success);
+                Assert.Equal(match_start, m.Index);
+                Assert.Equal(match_length, m.Length);
+            }
+            finally
+            {
+                RegexHelpers.RestoreSafeSizeThresholdToDefault();
+            }
         }
 
         public static IEnumerable<object[]> AllMatches_TestData()
