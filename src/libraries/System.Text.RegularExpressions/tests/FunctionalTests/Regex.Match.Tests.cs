@@ -2060,7 +2060,7 @@ namespace System.Text.RegularExpressions.Tests
         {
             int k = 10_000;
             string ab = MkRandom_a_b_String(k);
-            yield return new object[] { "[ab]{10000}bc(x|y)z", ab + "bcxz", 0, k + 4 };
+            yield return new object[] { "[ab]{10000}bc(x|y)z[ab]{10000}", ab + "bcxz" + ab, 0, 2*k + 4 };
         }
 
         /// <summary>
